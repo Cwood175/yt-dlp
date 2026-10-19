@@ -17,8 +17,15 @@ from ._utils import (
 
 
 def traverse_obj(
-        obj, *paths, default=NO_DEFAULT, expected_type=None, get_all=True,
-        casesense=True, is_user_input=NO_DEFAULT, traverse_string=False):
+    obj,
+    *paths,
+    default=NO_DEFAULT,
+    expected_type=None,
+    get_all=True,
+    casesense=True,
+    is_user_input=NO_DEFAULT,
+    traverse_string=False,
+):
     """
     Safely traverse nested `dict`s and `Iterable`s
 
@@ -80,7 +87,9 @@ def traverse_obj(
                             is always returned. If a path ends on a `dict` that result will always be a `dict`.
     """
     if is_user_input is not NO_DEFAULT:
-        deprecation_warning('The is_user_input parameter is deprecated and no longer works')
+        deprecation_warning(
+            "The is_user_input parameter is deprecated and no longer works"
+        )
 
     casefold = lambda k: k.casefold() if isinstance(k, str) else k
 
@@ -102,7 +111,7 @@ def traverse_obj(
             result = obj
 
         elif isinstance(key, set):
-            assert len(key) == 1, 'Set should only be used to wrap a single item'
+            assert len(key) == 1, "Set should only be used to wrap a single item"
             item = next(iter(key))
             if isinstance(item, type):
                 if isinstance(obj, item):
@@ -113,13 +122,16 @@ def traverse_obj(
         elif isinstance(key, (list, tuple)):
             branching = True
             result = itertools.chain.from_iterable(
-                apply_path(obj, branch, is_last)[0] for branch in key)
+                apply_path(obj, branch, is_last)[0] for branch in key
+            )
 
         elif key is ...:
             branching = True
             if isinstance(obj, collections.abc.Mapping):
                 result = obj.values()
-            elif is_iterable_like(obj) or isinstance(obj, xml.etree.ElementTree.Element):
+            elif is_iterable_like(obj) or isinstance(
+                obj, xml.etree.ElementTree.Element
+            ):
                 result = obj
             elif isinstance(obj, re.Match):
                 result = obj.groups()
@@ -133,12 +145,14 @@ def traverse_obj(
             branching = True
             if isinstance(obj, collections.abc.Mapping):
                 iter_obj = obj.items()
-            elif is_iterable_like(obj) or isinstance(obj, xml.etree.ElementTree.Element):
+            elif is_iterable_like(obj) or isinstance(
+                obj, xml.etree.ElementTree.Element
+            ):
                 iter_obj = enumerate(obj)
             elif isinstance(obj, re.Match):
                 iter_obj = itertools.chain(
-                    enumerate((obj.group(), *obj.groups())),
-                    obj.groupdict().items())
+                    enumerate((obj.group(), *obj.groups())), obj.groupdict().items()
+                )
             elif traverse_string:
                 branching = False
                 iter_obj = enumerate(str(obj))
@@ -147,18 +161,24 @@ def traverse_obj(
 
             result = (v for k, v in iter_obj if try_call(key, args=(k, v)))
             if not branching:  # string traversal
-                result = ''.join(result)
+                result = "".join(result)
 
         elif isinstance(key, dict):
-            iter_obj = ((k, _traverse_obj(obj, v, False, is_last)) for k, v in key.items())
+            iter_obj = (
+                (k, _traverse_obj(obj, v, False, is_last)) for k, v in key.items()
+            )
             result = {
-                k: v if v is not None else default for k, v in iter_obj
+                k: v if v is not None else default
+                for k, v in iter_obj
                 if v is not None or default is not NO_DEFAULT
             } or None
 
         elif isinstance(obj, collections.abc.Mapping):
-            result = (try_call(obj.get, args=(key,)) if casesense or try_call(obj.__contains__, args=(key,)) else
-                      next((v for k, v in obj.items() if casefold(k) == key), None))
+            result = (
+                try_call(obj.get, args=(key,))
+                if casesense or try_call(obj.__contains__, args=(key,))
+                else next((v for k, v in obj.items() if casefold(k) == key), None)
+            )
 
         elif isinstance(obj, re.Match):
             if isinstance(key, int) or casesense:
@@ -166,10 +186,14 @@ def traverse_obj(
                     result = obj.group(key)
 
             elif isinstance(key, str):
-                result = next((v for k, v in obj.groupdict().items() if casefold(k) == key), None)
+                result = next(
+                    (v for k, v in obj.groupdict().items() if casefold(k) == key), None
+                )
 
         elif isinstance(key, (int, slice)):
-            if is_iterable_like(obj, (collections.abc.Sequence, xml.etree.ElementTree.Element)):
+            if is_iterable_like(
+                obj, (collections.abc.Sequence, xml.etree.ElementTree.Element)
+            ):
                 branching = isinstance(key, slice)
                 with contextlib.suppress(IndexError):
                     result = obj[key]
@@ -178,27 +202,27 @@ def traverse_obj(
                     result = str(obj)[key]
 
         elif isinstance(obj, xml.etree.ElementTree.Element) and isinstance(key, str):
-            xpath, _, special = key.rpartition('/')
-            if not special.startswith('@') and special != 'text()':
+            xpath, _, special = key.rpartition("/")
+            if not special.startswith("@") and special != "text()":
                 xpath = key
                 special = None
 
             # Allow abbreviations of relative paths, absolute paths error
-            if xpath.startswith('/'):
-                xpath = f'.{xpath}'
-            elif xpath and not xpath.startswith('./'):
-                xpath = f'./{xpath}'
+            if xpath.startswith("/"):
+                xpath = f".{xpath}"
+            elif xpath and not xpath.startswith("./"):
+                xpath = f"./{xpath}"
 
             def apply_specials(element):
                 if special is None:
                     return element
-                if special == '@':
+                if special == "@":
                     return element.attrib
-                if special.startswith('@'):
+                if special.startswith("@"):
                     return try_call(element.attrib.get, args=(special[1:],))
-                if special == 'text()':
+                if special == "text()":
                     return element.text
-                assert False, f'apply_specials is missing case for {special!r}'
+                assert False, f"apply_specials is missing case for {special!r}"
 
             if xpath:
                 result = list(map(apply_specials, obj.iterfind(xpath)))
@@ -266,7 +290,9 @@ def traverse_obj(
 
 
 def get_first(obj, *paths, **kwargs):
-    return traverse_obj(obj, *((..., *variadic(keys)) for keys in paths), **kwargs, get_all=False)
+    return traverse_obj(
+        obj, *((..., *variadic(keys)) for keys in paths), **kwargs, get_all=False
+    )
 
 
 def dict_get(d, key_or_keys, default=None, skip_false_values=True):

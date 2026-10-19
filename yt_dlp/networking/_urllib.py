@@ -43,18 +43,18 @@ from ..socks import ProxyError as SocksProxyError
 from ..utils import update_url_query
 from ..utils.networking import normalize_url
 
-SUPPORTED_ENCODINGS = ['gzip', 'deflate']
+SUPPORTED_ENCODINGS = ["gzip", "deflate"]
 CONTENT_DECODE_ERRORS = [zlib.error, OSError]
 
 if brotli:
-    SUPPORTED_ENCODINGS.append('br')
+    SUPPORTED_ENCODINGS.append("br")
     CONTENT_DECODE_ERRORS.append(brotli.error)
 
 
 def _create_http_connection(http_class, source_address, *args, **kwargs):
     hc = http_class(*args, **kwargs)
 
-    if hasattr(hc, '_create_connection'):
+    if hasattr(hc, "_create_connection"):
         hc._create_connection = create_connection
 
     if source_address is not None:
@@ -86,22 +86,29 @@ class HTTPHandler(urllib.request.AbstractHTTPHandler):
     @staticmethod
     def _make_conn_class(base, req):
         conn_class = base
-        socks_proxy = req.headers.pop('Ytdl-socks-proxy', None)
+        socks_proxy = req.headers.pop("Ytdl-socks-proxy", None)
         if socks_proxy:
             conn_class = make_socks_conn_class(conn_class, socks_proxy)
         return conn_class
 
     def http_open(self, req):
         conn_class = self._make_conn_class(http.client.HTTPConnection, req)
-        return self.do_open(functools.partial(
-            _create_http_connection, conn_class, self._source_address), req)
+        return self.do_open(
+            functools.partial(
+                _create_http_connection, conn_class, self._source_address
+            ),
+            req,
+        )
 
     def https_open(self, req):
         conn_class = self._make_conn_class(http.client.HTTPSConnection, req)
         return self.do_open(
             functools.partial(
-                _create_http_connection, conn_class, self._source_address),
-            req, context=self._context)
+                _create_http_connection, conn_class, self._source_address
+            ),
+            req,
+            context=self._context,
+        )
 
     @staticmethod
     def deflate(data):
@@ -151,28 +158,36 @@ class HTTPHandler(urllib.request.AbstractHTTPHandler):
         # To decompress, we simply do the reverse.
         # [1]: https://datatracker.ietf.org/doc/html/rfc9110#name-content-encoding
         decoded_response = None
-        for encoding in (e.strip() for e in reversed(resp.headers.get('Content-encoding', '').split(','))):
-            if encoding == 'gzip':
+        for encoding in (
+            e.strip()
+            for e in reversed(resp.headers.get("Content-encoding", "").split(","))
+        ):
+            if encoding == "gzip":
                 decoded_response = self.gz(decoded_response or resp.read())
-            elif encoding == 'deflate':
+            elif encoding == "deflate":
                 decoded_response = self.deflate(decoded_response or resp.read())
-            elif encoding == 'br' and brotli:
+            elif encoding == "br" and brotli:
                 decoded_response = self.brotli(decoded_response or resp.read())
 
         if decoded_response is not None:
-            resp = urllib.request.addinfourl(io.BytesIO(decoded_response), old_resp.headers, old_resp.url, old_resp.code)
+            resp = urllib.request.addinfourl(
+                io.BytesIO(decoded_response),
+                old_resp.headers,
+                old_resp.url,
+                old_resp.code,
+            )
             resp.msg = old_resp.msg
         # Percent-encode redirect URL of Location HTTP header to satisfy RFC 3986 (see
         # https://github.com/ytdl-org/youtube-dl/issues/6457).
         if 300 <= resp.code < 400:
-            location = resp.headers.get('Location')
+            location = resp.headers.get("Location")
             if location:
                 # As of RFC 2616 default charset is iso-8859-1 that is respected by python 3
-                location = location.encode('iso-8859-1').decode()
+                location = location.encode("iso-8859-1").decode()
                 location_escaped = normalize_url(location)
                 if location != location_escaped:
-                    del resp.headers['Location']
-                    resp.headers['Location'] = location_escaped
+                    del resp.headers["Location"]
+                    resp.headers["Location"] = location_escaped
         return resp
 
     https_request = http_request
@@ -180,8 +195,9 @@ class HTTPHandler(urllib.request.AbstractHTTPHandler):
 
 
 def make_socks_conn_class(base_class, socks_proxy):
-    assert issubclass(base_class, (
-        http.client.HTTPConnection, http.client.HTTPSConnection))
+    assert issubclass(
+        base_class, (http.client.HTTPConnection, http.client.HTTPSConnection)
+    )
 
     proxy_args = make_socks_proxy_opts(socks_proxy)
 
@@ -190,13 +206,17 @@ def make_socks_conn_class(base_class, socks_proxy):
 
         def connect(self):
             self.sock = create_connection(
-                (proxy_args['addr'], proxy_args['port']),
+                (proxy_args["addr"], proxy_args["port"]),
                 timeout=self.timeout,
                 source_address=self.source_address,
                 _create_socket_func=functools.partial(
-                    create_socks_proxy_socket, (self.host, self.port), proxy_args))
+                    create_socks_proxy_socket, (self.host, self.port), proxy_args
+                ),
+            )
             if isinstance(self, http.client.HTTPSConnection):
-                self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
+                self.sock = self._context.wrap_socket(
+                    self.sock, server_hostname=self.host
+                )
 
     return SocksConnection
 
@@ -214,7 +234,9 @@ class RedirectHandler(urllib.request.HTTPRedirectHandler):
     3. https://github.com/python/cpython/issues/91306
     """
 
-    http_error_301 = http_error_303 = http_error_307 = http_error_308 = urllib.request.HTTPRedirectHandler.http_error_302
+    http_error_301 = http_error_303 = http_error_307 = http_error_308 = (
+        urllib.request.HTTPRedirectHandler.http_error_302
+    )
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         if code not in (301, 302, 303, 307, 308):
@@ -225,19 +247,26 @@ class RedirectHandler(urllib.request.HTTPRedirectHandler):
         # Technically the Cookie header should be in unredirected_hdrs,
         # however in practice some may set it in normal headers anyway.
         # We will remove it here to prevent any leaks.
-        remove_headers = ['Cookie']
+        remove_headers = ["Cookie"]
 
         new_method = get_redirect_method(req.get_method(), code)
         # only remove payload if method changed (e.g. POST to GET)
         if new_method != req.get_method():
             new_data = None
-            remove_headers.extend(['Content-Length', 'Content-Type'])
+            remove_headers.extend(["Content-Length", "Content-Type"])
 
-        new_headers = {k: v for k, v in req.headers.items() if k.title() not in remove_headers}
+        new_headers = {
+            k: v for k, v in req.headers.items() if k.title() not in remove_headers
+        }
 
         return urllib.request.Request(
-            newurl, headers=new_headers, origin_req_host=req.origin_req_host,
-            unverifiable=True, method=new_method, data=new_data)
+            newurl,
+            headers=new_headers,
+            origin_req_host=req.origin_req_host,
+            unverifiable=True,
+            method=new_method,
+            data=new_data,
+        )
 
 
 class ProxyHandler(urllib.request.BaseHandler):
@@ -246,29 +275,33 @@ class ProxyHandler(urllib.request.BaseHandler):
     def __init__(self, proxies=None):
         self.proxies = proxies
         # Set default handlers
-        for type in ('http', 'https', 'ftp'):
-            setattr(self, '%s_open' % type, lambda r, meth=self.proxy_open: meth(r))
+        for type in ("http", "https", "ftp"):
+            setattr(self, "%s_open" % type, lambda r, meth=self.proxy_open: meth(r))
 
     def proxy_open(self, req):
         proxy = select_proxy(req.get_full_url(), self.proxies)
         if proxy is None:
             return
-        if urllib.parse.urlparse(proxy).scheme.lower() in ('socks4', 'socks4a', 'socks5', 'socks5h'):
-            req.add_header('Ytdl-socks-proxy', proxy)
+        if urllib.parse.urlparse(proxy).scheme.lower() in (
+            "socks4",
+            "socks4a",
+            "socks5",
+            "socks5h",
+        ):
+            req.add_header("Ytdl-socks-proxy", proxy)
             # yt-dlp's http/https handlers do wrapping the socket with socks
             return None
-        return urllib.request.ProxyHandler.proxy_open(
-            self, req, proxy, None)
+        return urllib.request.ProxyHandler.proxy_open(self, req, proxy, None)
 
 
 class PUTRequest(urllib.request.Request):
     def get_method(self):
-        return 'PUT'
+        return "PUT"
 
 
 class HEADRequest(urllib.request.Request):
     def get_method(self):
-        return 'HEAD'
+        return "HEAD"
 
 
 def update_Request(req, url=None, data=None, headers=None, query=None):
@@ -277,16 +310,20 @@ def update_Request(req, url=None, data=None, headers=None, query=None):
     req_data = data if data is not None else req.data
     req_url = update_url_query(url or req.get_full_url(), query)
     req_get_method = req.get_method()
-    if req_get_method == 'HEAD':
+    if req_get_method == "HEAD":
         req_type = HEADRequest
-    elif req_get_method == 'PUT':
+    elif req_get_method == "PUT":
         req_type = PUTRequest
     else:
         req_type = urllib.request.Request
     new_req = req_type(
-        req_url, data=req_data, headers=req_headers,
-        origin_req_host=req.origin_req_host, unverifiable=req.unverifiable)
-    if hasattr(req, 'timeout'):
+        req_url,
+        data=req_data,
+        headers=req_headers,
+        origin_req_host=req.origin_req_host,
+        unverifiable=req.unverifiable,
+    )
+    if hasattr(req, "timeout"):
         new_req.timeout = req.timeout
     return new_req
 
@@ -302,8 +339,12 @@ class UrllibResponseAdapter(Response):
         # 1. https://docs.python.org/3/library/urllib.request.html#urllib.response.addinfourl.getcode
         # 2. https://docs.python.org/3.10/library/http.client.html#http.client.HTTPResponse.status
         super().__init__(
-            fp=res, headers=res.headers, url=res.url,
-            status=getattr(res, 'status', None) or res.getcode(), reason=getattr(res, 'reason', None))
+            fp=res,
+            headers=res.headers,
+            url=res.url,
+            status=getattr(res, "status", None) or res.getcode(),
+            reason=getattr(res, "reason", None),
+        )
 
     def read(self, amt=None):
         try:
@@ -323,31 +364,35 @@ def handle_sslerror(e: ssl.SSLError):
 
 def handle_response_read_exceptions(e):
     if isinstance(e, http.client.IncompleteRead):
-        raise IncompleteRead(partial=len(e.partial), cause=e, expected=e.expected) from e
+        raise IncompleteRead(
+            partial=len(e.partial), cause=e, expected=e.expected
+        ) from e
     elif isinstance(e, ssl.SSLError):
         handle_sslerror(e)
-    elif isinstance(e, (OSError, EOFError, http.client.HTTPException, *CONTENT_DECODE_ERRORS)):
+    elif isinstance(
+        e, (OSError, EOFError, http.client.HTTPException, *CONTENT_DECODE_ERRORS)
+    ):
         # OSErrors raised here should mostly be network related
         raise TransportError(cause=e) from e
 
 
 @register_rh
 class UrllibRH(RequestHandler, InstanceStoreMixin):
-    _SUPPORTED_URL_SCHEMES = ('http', 'https', 'data', 'ftp')
-    _SUPPORTED_PROXY_SCHEMES = ('http', 'socks4', 'socks4a', 'socks5', 'socks5h')
+    _SUPPORTED_URL_SCHEMES = ("http", "https", "data", "ftp")
+    _SUPPORTED_PROXY_SCHEMES = ("http", "socks4", "socks4a", "socks5", "socks5h")
     _SUPPORTED_FEATURES = (Features.NO_PROXY, Features.ALL_PROXY)
-    RH_NAME = 'urllib'
+    RH_NAME = "urllib"
 
     def __init__(self, *, enable_file_urls: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.enable_file_urls = enable_file_urls
         if self.enable_file_urls:
-            self._SUPPORTED_URL_SCHEMES = (*self._SUPPORTED_URL_SCHEMES, 'file')
+            self._SUPPORTED_URL_SCHEMES = (*self._SUPPORTED_URL_SCHEMES, "file")
 
     def _check_extensions(self, extensions):
         super()._check_extensions(extensions)
-        extensions.pop('cookiejar', None)
-        extensions.pop('timeout', None)
+        extensions.pop("cookiejar", None)
+        extensions.pop("timeout", None)
 
     def _create_instance(self, proxies, cookiejar):
         opener = urllib.request.OpenerDirector()
@@ -356,7 +401,8 @@ class UrllibRH(RequestHandler, InstanceStoreMixin):
             HTTPHandler(
                 debuglevel=int(bool(self.verbose)),
                 context=self._make_sslcontext(),
-                source_address=self.source_address),
+                source_address=self.source_address,
+            ),
             HTTPCookieProcessor(cookiejar),
             DataHandler(),
             UnknownHandler(),
@@ -385,26 +431,34 @@ class UrllibRH(RequestHandler, InstanceStoreMixin):
             url=request.url,
             data=request.data,
             headers=dict(headers),
-            method=request.method
+            method=request.method,
         )
 
         opener = self._get_instance(
             proxies=request.proxies or self.proxies,
-            cookiejar=request.extensions.get('cookiejar') or self.cookiejar
+            cookiejar=request.extensions.get("cookiejar") or self.cookiejar,
         )
         try:
-            res = opener.open(urllib_req, timeout=float(request.extensions.get('timeout') or self.timeout))
+            res = opener.open(
+                urllib_req,
+                timeout=float(request.extensions.get("timeout") or self.timeout),
+            )
         except urllib.error.HTTPError as e:
             if isinstance(e.fp, (http.client.HTTPResponse, urllib.response.addinfourl)):
                 # Prevent file object from being closed when urllib.error.HTTPError is destroyed.
                 e._closer.close_called = True
-                raise HTTPError(UrllibResponseAdapter(e.fp), redirect_loop='redirect error' in str(e)) from e
+                raise HTTPError(
+                    UrllibResponseAdapter(e.fp),
+                    redirect_loop="redirect error" in str(e),
+                ) from e
             raise  # unexpected
         except urllib.error.URLError as e:
             cause = e.reason  # NOTE: cause may be a string
 
             # proxy errors
-            if 'tunnel connection failed' in str(cause).lower() or isinstance(cause, SocksProxyError):
+            if "tunnel connection failed" in str(cause).lower() or isinstance(
+                cause, SocksProxyError
+            ):
                 raise ProxyError(cause=e) from e
 
             handle_response_read_exceptions(cause)

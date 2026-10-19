@@ -1,4 +1,5 @@
 """No longer used and new code should not use. Exists only for API compat."""
+
 import asyncio
 import atexit
 import platform
@@ -36,14 +37,21 @@ has_websockets = bool(websockets)
 
 class WebSocketsWrapper:
     """Wraps websockets module to use in non-async scopes"""
+
     pool = None
 
     def __init__(self, url, headers=None, connect=True, **ws_kwargs):
         self.loop = asyncio.new_event_loop()
         # XXX: "loop" is deprecated
         self.conn = websockets.connect(
-            url, extra_headers=headers, ping_interval=None,
-            close_timeout=float('inf'), loop=self.loop, ping_timeout=float('inf'), **ws_kwargs)
+            url,
+            extra_headers=headers,
+            ping_interval=None,
+            close_timeout=float("inf"),
+            loop=self.loop,
+            ping_timeout=float("inf"),
+            **ws_kwargs,
+        )
         if connect:
             self.__enter__()
         atexit.register(self.__exit__, None, None, None)
@@ -61,7 +69,9 @@ class WebSocketsWrapper:
 
     def __exit__(self, type, value, traceback):
         try:
-            return self.run_with_loop(self.conn.__aexit__(type, value, traceback), self.loop)
+            return self.run_with_loop(
+                self.conn.__aexit__(type, value, traceback), self.loop
+            )
         finally:
             self.loop.close()
             self._cancel_all_tasks(self.loop)
@@ -71,13 +81,13 @@ class WebSocketsWrapper:
     @staticmethod
     def run_with_loop(main, loop):
         if not asyncio.iscoroutine(main):
-            raise ValueError(f'a coroutine was expected, got {main!r}')
+            raise ValueError(f"a coroutine was expected, got {main!r}")
 
         try:
             return loop.run_until_complete(main)
         finally:
             loop.run_until_complete(loop.shutdown_asyncgens())
-            if hasattr(loop, 'shutdown_default_executor'):
+            if hasattr(loop, "shutdown_default_executor"):
                 loop.run_until_complete(loop.shutdown_default_executor())
 
     @staticmethod
@@ -92,28 +102,34 @@ class WebSocketsWrapper:
 
         # XXX: "loop" is removed in python 3.10+
         loop.run_until_complete(
-            asyncio.gather(*to_cancel, loop=loop, return_exceptions=True))
+            asyncio.gather(*to_cancel, loop=loop, return_exceptions=True)
+        )
 
         for task in to_cancel:
             if task.cancelled():
                 continue
             if task.exception() is not None:
-                loop.call_exception_handler({
-                    'message': 'unhandled exception during asyncio.run() shutdown',
-                    'exception': task.exception(),
-                    'task': task,
-                })
+                loop.call_exception_handler(
+                    {
+                        "message": "unhandled exception during asyncio.run() shutdown",
+                        "exception": task.exception(),
+                        "task": task,
+                    }
+                )
 
 
 def load_plugins(name, suffix, namespace):
     from ..plugins import load_plugins
+
     ret = load_plugins(name, suffix)
     namespace.update(ret)
     return ret
 
 
 def traverse_dict(dictn, keys, casesense=True):
-    return traverse_obj(dictn, keys, casesense=casesense, is_user_input=True, traverse_string=True)
+    return traverse_obj(
+        dictn, keys, casesense=casesense, is_user_input=True, traverse_string=True
+    )
 
 
 def decode_base(value, digits):
@@ -121,19 +137,19 @@ def decode_base(value, digits):
 
 
 def platform_name():
-    """ Returns the platform name as a str """
+    """Returns the platform name as a str"""
     return platform.platform()
 
 
 def get_subprocess_encoding():
-    if sys.platform == 'win32' and sys.getwindowsversion()[0] >= 5:
+    if sys.platform == "win32" and sys.getwindowsversion()[0] >= 5:
         # For subprocess calls, encode with locale encoding
         # Refer to http://stackoverflow.com/a/9951851/35070
         encoding = preferredencoding()
     else:
         encoding = sys.getfilesystemencoding()
     if encoding is None:
-        encoding = 'utf-8'
+        encoding = "utf-8"
     return encoding
 
 
@@ -144,10 +160,10 @@ def decode_png(png_data):
     # Reference: https://www.w3.org/TR/PNG/
     header = png_data[8:]
 
-    if png_data[:8] != b'\x89PNG\x0d\x0a\x1a\x0a' or header[4:8] != b'IHDR':
-        raise OSError('Not a valid PNG file.')
+    if png_data[:8] != b"\x89PNG\x0d\x0a\x1a\x0a" or header[4:8] != b"IHDR":
+        raise OSError("Not a valid PNG file.")
 
-    int_map = {1: '>B', 2: '>H', 4: '>I'}
+    int_map = {1: ">B", 2: ">H", 4: ">I"}
     unpack_integer = lambda x: struct.unpack(int_map[len(x)], x)[0]
 
     chunks = []
@@ -164,25 +180,21 @@ def decode_png(png_data):
 
         header = header[4:]  # Skip CRC
 
-        chunks.append({
-            'type': chunk_type,
-            'length': length,
-            'data': chunk_data
-        })
+        chunks.append({"type": chunk_type, "length": length, "data": chunk_data})
 
-    ihdr = chunks[0]['data']
+    ihdr = chunks[0]["data"]
 
     width = unpack_integer(ihdr[:4])
     height = unpack_integer(ihdr[4:8])
 
-    idat = b''
+    idat = b""
 
     for chunk in chunks:
-        if chunk['type'] == b'IDAT':
-            idat += chunk['data']
+        if chunk["type"] == b"IDAT":
+            idat += chunk["data"]
 
     if not idat:
-        raise OSError('Unable to read PNG data.')
+        raise OSError("Unable to read PNG data.")
 
     decompressed_data = bytearray(zlib.decompress(idat))
 
@@ -214,11 +226,11 @@ def decode_png(png_data):
                 up = _get_pixel(basex - stride)
 
             if filter_type == 1:  # Sub
-                color = (color + left) & 0xff
+                color = (color + left) & 0xFF
             elif filter_type == 2:  # Up
-                color = (color + up) & 0xff
+                color = (color + up) & 0xFF
             elif filter_type == 3:  # Average
-                color = (color + ((left + up) >> 1)) & 0xff
+                color = (color + ((left + up) >> 1)) & 0xFF
             elif filter_type == 4:  # Paeth
                 a = left
                 b = up
@@ -234,11 +246,11 @@ def decode_png(png_data):
                 pc = abs(p - c)
 
                 if pa <= pb and pa <= pc:
-                    color = (color + a) & 0xff
+                    color = (color + a) & 0xFF
                 elif pb <= pc:
-                    color = (color + b) & 0xff
+                    color = (color + b) & 0xFF
                 else:
-                    color = (color + c) & 0xff
+                    color = (color + c) & 0xFF
 
             current_row.append(color)
 
@@ -249,7 +261,7 @@ def register_socks_protocols():
     # "Register" SOCKS protocols
     # In Python < 2.6.5, urlsplit() suffers from bug https://bugs.python.org/issue7904
     # URLs with protocols not in urlparse.uses_netloc are not handled correctly
-    for scheme in ('socks', 'socks4', 'socks4a', 'socks5'):
+    for scheme in ("socks", "socks4", "socks4a", "socks5"):
         if scheme not in urllib.parse.uses_netloc:
             urllib.parse.uses_netloc.append(scheme)
 
@@ -257,9 +269,11 @@ def register_socks_protocols():
 def handle_youtubedl_headers(headers):
     filtered_headers = headers
 
-    if 'Youtubedl-no-compression' in filtered_headers:
-        filtered_headers = {k: v for k, v in filtered_headers.items() if k.lower() != 'accept-encoding'}
-        del filtered_headers['Youtubedl-no-compression']
+    if "Youtubedl-no-compression" in filtered_headers:
+        filtered_headers = {
+            k: v for k, v in filtered_headers.items() if k.lower() != "accept-encoding"
+        }
+        del filtered_headers["Youtubedl-no-compression"]
 
     return filtered_headers
 
@@ -273,10 +287,11 @@ def request_to_url(req):
 
 def sanitized_Request(url, *args, **kwargs):
     from ..utils import extract_basic_auth, sanitize_url
+
     url, auth_header = extract_basic_auth(escape_url(sanitize_url(url)))
     if auth_header is not None:
-        headers = args[1] if len(args) >= 2 else kwargs.setdefault('headers', {})
-        headers['Authorization'] = auth_header
+        headers = args[1] if len(args) >= 2 else kwargs.setdefault("headers", {})
+        headers["Authorization"] = auth_header
     return urllib.request.Request(url, *args, **kwargs)
 
 
@@ -301,14 +316,18 @@ class YoutubeDLCookieProcessor(urllib.request.HTTPCookieProcessor):
 
 
 def make_HTTPS_handler(params, **kwargs):
-    return YoutubeDLHTTPSHandler(params, context=make_ssl_context(
-        verify=not params.get('nocheckcertificate'),
-        client_certificate=params.get('client_certificate'),
-        client_certificate_key=params.get('client_certificate_key'),
-        client_certificate_password=params.get('client_certificate_password'),
-        legacy_support=params.get('legacyserverconnect'),
-        use_certifi='no-certifi' not in params.get('compat_opts', []),
-    ), **kwargs)
+    return YoutubeDLHTTPSHandler(
+        params,
+        context=make_ssl_context(
+            verify=not params.get("nocheckcertificate"),
+            client_certificate=params.get("client_certificate"),
+            client_certificate_key=params.get("client_certificate_key"),
+            client_certificate_password=params.get("client_certificate_password"),
+            legacy_support=params.get("legacyserverconnect"),
+            use_certifi="no-certifi" not in params.get("compat_opts", []),
+        ),
+        **kwargs,
+    )
 
 
 def process_communicate_or_kill(p, *args, **kwargs):
